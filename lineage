@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ "$1" == "--version" ];then
+  echo "Version: 1.0-$(cat $(readlink -f $0)|sha256sum|cut -c 1-6 )"
+  exit 0
+fi
+
+if [ -z $CACHEDIR ];then
+  export CACHEDIR=$(mktemp -d)
+  trap "rm -fr $CACHEDIR" EXIT
+fi
+
+CRDCACHE=$CACHEDIR/crds.json
+XRDCACHE=$CACHEDIR/xrds.json
+OTHERCACHE=$CACHEDIR/other.json
+
+
+if [ ! -f $CRDCACHE ];then
+  kubectl get crds -o json >$CRDCACHE &
+fi
+
+if [ ! -f $XRDCACHE ];then
+  kubectl get compositeresourcedefinitions.apiextensions.crossplane.io -o json >$XRDCACHE &
+fi
+
+if [ ! -f $OTHERCACHE ];then
+  echo '{}' >$OTHERCACHE
+fi
+
+find_other_kind() {
+  for group in $(cat $OTHERCACHE|jq -r ".${KIND} // empty") $(cat $CRDCACHE|jq -r '.items[].spec|select(.names.kind|ascii_downcase == "'${KIND,,}'").group');do
+    crd=${KIND}.${group}
+#  for crd in $(kubectl get crds -o name|grep -i ${KIND}s|cut -f 2 -d/);do
+    if kubectl get $crd $NAME >/dev/null;then
+      jq <$OTHERCACHE '.+ {"'${KIND}'":"'${group}'"}'|sponge $OTHERCACHE
+      kubectl describe $crd $NAME|less
+      return 0
+    fi
+  done
+}
+
+get_resource() {
+  RES=$(echo "$@" |grep -o '[[:alnum:]._-]*/[[:alnum:]._-]*')
+  KIND=${RES%%/*}
+  NAME=${RES##*/}
+}
+if [ $# -lt 1 ];then
+  echo "Usage: $0 <crossplane xrd type>/<name>" >&2
+  exit -1
+fi
+
+FIRST="$1";shift
+
+if [ "$FIRST" == "___FZF_ENTER" ];then
+  get_resource "$1"
+  if kubectl get $KIND $NAME &>/dev/null;then
+    kubectl describe $KIND $NAME|less
+  else
+    find_other_kind
+  fi
+elif [ "$FIRST" == "___FZF_PREVIEW" ];then
+  get_resource "$1"
+  if [ "$KIND" == "Object" ];then
+    kubectl -o json get $KIND/$NAME|jq -r '.spec.forProvider.manifest | ""+.kind+"/"+.metadata.name+"@"+.metadata.namespace'
+  elif [ "$KIND" == "Release" ];then
+    kubectl -o json get $KIND/$NAME|jq -r '.spec.forProvider|.chart.name+"@"+.namespace'
+  elif [ "$KIND" == "Dependency" ];then
+    dependee=$(kubectl -o json get $KIND/$NAME|jq -r '.metadata.labels.dependsOn')
+    kubectl -o json get Dependency/${dependee}|jq -r '.metadata.ownerReferences[]|"" + .kind + "/" + .name'
+  else
+    echo "Not an 'Object'"
+  fi
+elif [ "$FIRST" == "___FZF_DEFAULT" ];then
+  CLAIM=$1
+  get_resource "$CLAIM"
+  shift
+  RES=$(kubectl get $KIND -o json -A|jq -r '.items[]|select(.metadata.name=="'$NAME'").spec.resourceRef|.kind+"/"+.name')
+  if [ "$RES" == "/" ];then 
+    RES="$CLAIM"
+  fi
+  kubectl lineage --exclude-types Event,ProviderConfigUsage.aws,ProviderConfigUsage.tf,ProviderConfigUsage.helm,ProviderConfigUsage.kubernetes "$RES" "$@"
+else
+  FZF_DEFAULT_COMMAND="$0 ___FZF_DEFAULT $FIRST $@" \
+  fzf --no-mouse --header-lines=1 --layout=reverse \
+  --preview "$0 ___FZF_PREVIEW {}" \
+  --preview-window up:1:hidden:wrap \
+  --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview' \
+  --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-R: Reload, CTRL-P: Object preview'
+fi
