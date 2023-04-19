@@ -2,7 +2,7 @@
 self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ "$1" == "--version" ];then
-  echo "Version: 1.0-$(cat $(readlink -f $0)|sha256sum|cut -c 1-6 )"
+  echo "Version: 1.0"
   exit 0
 fi
 
@@ -29,9 +29,8 @@ if [ ! -f $OTHERCACHE ];then
 fi
 
 find_other_kind() {
-  for group in $(cat $OTHERCACHE|jq -r ".${KIND} // empty") $(cat $CRDCACHE|jq -r '.items[].spec|select(.names.kind|ascii_downcase == "'${KIND,,}'").group');do
+  for group in $(jq -r ".${KIND} // empty" $OTHERCACHE) $(jq -r '.items[].spec|select(.names.kind|ascii_downcase == "'${KIND,,}'").group' $CRDCACHE);do
     crd=${KIND}.${group}
-#  for crd in $(kubectl get crds -o name|grep -i ${KIND}s|cut -f 2 -d/);do
     if kubectl get $crd $NAME >/dev/null;then
       jq <$OTHERCACHE '.+ {"'${KIND}'":"'${group}'"}'|sponge $OTHERCACHE
       kubectl describe $crd $NAME|less

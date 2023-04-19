@@ -1,4 +1,4 @@
-#target: lineage-tui
+#target: dromie/lineage-tui
 FROM alpine:3.15
 ARG FZF_VERSION=0.39.0
 ARG KUBECTL_VERSION=v1.27.0
