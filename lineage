@@ -39,7 +39,7 @@ find_other_kind() {
     crd=${KIND}.${group}
     if kubectl get $crd $NAME >/dev/null;then
       jq <$OTHERCACHE '.+ {"'${KIND}'":"'${group}'"}'|sponge $OTHERCACHE
-      kubectl describe $crd $NAME|less
+      echo $crd
       return 0
     fi
   done
@@ -55,11 +55,8 @@ FIRST="$1";shift
 
 if [ "$FIRST" == "___FZF_ENTER" ];then
   get_resource "$1"
-  if kubectl get $KIND $NAME &>/dev/null;then
-    kubectl describe $KIND $NAME|less
-  else
-    find_other_kind
-  fi
+  crd=$(find_other_kind)
+  kubectl describe $crd $NAME|less
 elif [ "$FIRST" == "___FZF_PREVIEW" ];then
   get_resource "$1"
   if [ "$KIND" == "Object" ];then
@@ -70,8 +67,13 @@ elif [ "$FIRST" == "___FZF_PREVIEW" ];then
     dependee=$(kubectl -o json get $KIND/$NAME|jq -r '.metadata.labels.dependsOn')
     kubectl -o json get Dependency/${dependee}|jq -r '.metadata.ownerReferences[]|"" + .kind + "/" + .name'
   else
-    echo "Not an 'Object'"
+    echo "No preview available.....(suggest one)"
   fi
+elif [ "$FIRST" == "___FZF_EDIT" ];then
+  CLAIM=$1
+  get_resource "$CLAIM"
+  crd=$(find_other_kind)
+  kubectl edit $crd $NAME
 elif [ "$FIRST" == "___FZF_DEFAULT" ];then
   CLAIM=$1
   get_resource "$CLAIM"
@@ -86,6 +88,6 @@ else
   fzf --no-mouse --header-lines=1 --layout=reverse \
   --preview "$0 ___FZF_PREVIEW {}" \
   --preview-window up:1:hidden:wrap \
-  --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview' \
-  --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-R: Reload, CTRL-P: Object preview'
+  --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {})' \
+  --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-E: Edit resource,CTRL-R: Reload, CTRL-P: Object preview'
 fi
