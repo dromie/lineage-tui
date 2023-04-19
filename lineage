@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if [ $# -lt 1 ];then
+  echo "Usage: $0 <crossplane xrd type>/<name>" >&2
+  echo "       $(echo $0|sed 's/./ /g') <crossplane claim type>/<name>" >&2
+  exit -1
+fi
+
 if [ "$1" == "--version" ];then
   echo "Version: 1.0"
   exit 0
@@ -44,10 +50,6 @@ get_resource() {
   KIND=${RES%%/*}
   NAME=${RES##*/}
 }
-if [ $# -lt 1 ];then
-  echo "Usage: $0 <crossplane xrd type>/<name>" >&2
-  exit -1
-fi
 
 FIRST="$1";shift
 
