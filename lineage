@@ -4,6 +4,7 @@ self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ $# -lt 1 ];then
   echo "Usage: $0 <crossplane xrd type>/<name>" >&2
   echo "       $(echo $0|sed 's/./ /g') <crossplane claim type>/<name>" >&2
+  echo "       $(echo $0|sed 's/./ /g') <crossplane claim type | xrd type >" >&2
   exit -1
 fi
 
@@ -20,7 +21,6 @@ fi
 CRDCACHE=$CACHEDIR/crds.json
 XRDCACHE=$CACHEDIR/xrds.json
 OTHERCACHE=$CACHEDIR/other.json
-
 
 if [ ! -f $CRDCACHE ];then
   kubectl get crds -o json >$CRDCACHE &
@@ -85,6 +85,7 @@ elif [ "$FIRST" == "___FZF_YAML" ];then
   crd=$(find_other_kind)
   kubectl get -o yaml $crd $NAME | less
 elif [ "$FIRST" == "___FZF_DEFAULT" ];then
+  date
   CLAIM=$1
   get_resource "$CLAIM"
   shift
@@ -101,10 +102,10 @@ else
     --bind 'enter:execute('$0' {})+abort'
   else
     FZF_DEFAULT_COMMAND="$0 ___FZF_DEFAULT $FIRST $@" \
-    fzf --no-mouse --header-lines=1 --layout=reverse \
+    fzf --no-mouse --header-lines=2 --layout=reverse \
     --preview "$0 ___FZF_PREVIEW {}" \
     --preview-window up:1:hidden:wrap \
-    --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {})' \
-    --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-R: Reload, CTRL-P: Object preview'
+    --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {}),ctrl-x:execute('$0' ___FZF_DELETE {})' \
+    --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-X: Delete resource, CTRL-R: Reload, CTRL-P: Object preview'
   fi
 fi

@@ -10,5 +10,5 @@ RUN wget https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VER
 RUN wget https://github.com/kubernetes-sigs/krew/releases/${KREW_VERSION}/download/krew-linux_amd64.tar.gz -O -|tar xvzC /usr/bin && /usr/bin/krew-linux_amd64 install krew 
 ENV PATH=${PATH}:/root/.krew/bin
 RUN kubectl krew install lineage
-
+ENV EDITOR=vim
 ADD lineage /usr/bin/
