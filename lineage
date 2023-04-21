@@ -74,6 +74,11 @@ elif [ "$FIRST" == "___FZF_EDIT" ];then
   get_resource "$CLAIM"
   crd=$(find_other_kind)
   kubectl edit $crd $NAME
+elif [ "$FIRST" == "___FZF_DELETE" ];then
+  CLAIM=$1
+  get_resource "$CLAIM"
+  crd=$(find_other_kind)
+  kubectl delete $crd $NAME
 elif [ "$FIRST" == "___FZF_YAML" ];then
   CLAIM=$1
   get_resource "$CLAIM"
@@ -89,10 +94,17 @@ elif [ "$FIRST" == "___FZF_DEFAULT" ];then
   fi
   kubectl lineage --exclude-types Event,ProviderConfigUsage.aws,ProviderConfigUsage.tf,ProviderConfigUsage.helm,ProviderConfigUsage.kubernetes "$RES" "$@"
 else
-  FZF_DEFAULT_COMMAND="$0 ___FZF_DEFAULT $FIRST $@" \
-  fzf --no-mouse --header-lines=1 --layout=reverse \
-  --preview "$0 ___FZF_PREVIEW {}" \
-  --preview-window up:1:hidden:wrap \
-  --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {})' \
-  --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-R: Reload, CTRL-P: Object preview'
+  get_resource "$FIRST"
+  if [ -z $RES -a -z $KIND ];then
+    FZF_DEFAULT_COMMAND="kubectl get $FIRST -A -o name" \
+    fzf --layout=reverse  \
+    --bind 'enter:execute('$0' {})+abort'
+  else
+    FZF_DEFAULT_COMMAND="$0 ___FZF_DEFAULT $FIRST $@" \
+    fzf --no-mouse --header-lines=1 --layout=reverse \
+    --preview "$0 ___FZF_PREVIEW {}" \
+    --preview-window up:1:hidden:wrap \
+    --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {})' \
+    --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-R: Reload, CTRL-P: Object preview'
+  fi
 fi
