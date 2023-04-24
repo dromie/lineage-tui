@@ -54,6 +54,7 @@ get_resource() {
 FIRST="$1";shift
 
 if [ "$FIRST" == "___FZF_ENTER" ];then
+  clear
   get_resource "$1"
   crd=$(find_other_kind)
   kubectl describe $crd $NAME|less
@@ -70,16 +71,31 @@ elif [ "$FIRST" == "___FZF_PREVIEW" ];then
     echo "No preview available.....(suggest one)"
   fi
 elif [ "$FIRST" == "___FZF_EDIT" ];then
+  clear
   CLAIM=$1
   get_resource "$CLAIM"
   crd=$(find_other_kind)
   kubectl edit $crd $NAME
 elif [ "$FIRST" == "___FZF_DELETE" ];then
-  CLAIM=$1
-  get_resource "$CLAIM"
+  clear
+  RES=$1
+  get_resource "$RES"
   crd=$(find_other_kind)
-  kubectl delete $crd $NAME
+  CLAIMJ=$(kubectl get $crd $NAME -o json|jq '.spec.claimRef')
+  if [ "$CLAIMJ" != "null" ];then
+    CLAIM=$(echo $CLAIMJ|jq '.kind +"/" +.name')
+    TEXT="You are trying to delete a Composite resource $crd/$NAME, although it has a claim $CLAIM!\nDo you want to delete the claim instead?"
+    if dialog --yesno "$TEXT" 7 $[ ($(echo -e $TEXT|head -1|wc -c)) +3 ];then
+      kubectl delete $CLAIM -n $(echo $CLAIMJ|jq '.namespace') | less
+      exit 0
+    fi
+  fi
+  TEXT="Are you sure you want to delete $crd/$NAME?"
+  if dialog --yesno "$TEXT" 5 $[ $(echo $TEXT|wc -c) +3 ];then
+    kubectl delete $crd $NAME | less
+  fi
 elif [ "$FIRST" == "___FZF_YAML" ];then
+  clear
   CLAIM=$1
   get_resource "$CLAIM"
   crd=$(find_other_kind)
@@ -107,5 +123,6 @@ else
     --preview-window up:1:hidden:wrap \
     --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {}),ctrl-x:execute('$0' ___FZF_DELETE {})' \
     --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-X: Delete resource, CTRL-R: Reload, CTRL-P: Object preview'
+    clear
   fi
 fi
