@@ -59,7 +59,6 @@ FIRST="$1";shift
 
 if [ "$FIRST" == "___FZF_ENTER" ];then
   clear
-  set -x
   get_resource "$1"
   crd=$(find_valid_kind)
   kubectl describe $crd $NAME |less
@@ -94,7 +93,7 @@ elif [ "$FIRST" == "___FZF_DELETE" ];then
     CLAIMAPI=${CLAIMAPI%%/*}
     TEXT="You are trying to delete a Composite resource $crd/$NAME, although it has a claim ${CLAIMKIND}.${CLAIMAPI}/${CLAIMNAME}!\nDo you want to delete the claim instead?"
     if dialog --yesno "$TEXT" 7 $[ ($(echo -e $TEXT|head -1|wc -c)) +3 ];then
-      echo kubectl delete ${CLAIMKIND}.${CLAIMAPI}/${CLAIMNAME} -n $(echo $CLAIMJ|jq -r '.namespace') 2>&1| less
+      kubectl delete ${CLAIMKIND}.${CLAIMAPI}/${CLAIMNAME} -n $(echo $CLAIMJ|jq -r '.namespace') 2>&1| less
       exit 0
     fi
   fi
