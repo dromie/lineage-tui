@@ -93,7 +93,7 @@ elif [ "$FIRST" == "___FZF_DELETE" ];then
     CLAIMAPI=${CLAIMAPI%%/*}
     TEXT="You are trying to delete a Composite resource $crd/$NAME, although it has a claim ${CLAIMKIND}.${CLAIMAPI}/${CLAIMNAME}!\nDo you want to delete the claim instead?"
     if dialog --yesno "$TEXT" 7 $[ ($(echo -e $TEXT|head -1|wc -c)) +3 ];then
-      kubectl delete ${CLAIMKIND}.${CLAIMAPI}/${CLAIMNAME} -n $(echo $CLAIMJ|jq -r '.namespace') 2>&1| less
+      kubectl delete ${CLAIMKIND}.${CLAIMAPI}/${CLAIMNAME} -n $(echo $CLAIMJ|jq -r '.namespace') --wait=false 2>&1| less
       exit 0
     fi
   fi
@@ -113,6 +113,17 @@ elif [ "$FIRST" == "___FZF_COMPOSITION" ];then
   get_resource "$CLAIM"
   crd=$(find_valid_kind)
   kubectl -o yaml get compositionrevision $(kubectl -o json get $crd/$NAME|jq -r '.spec.compositionRevisionRef.name') | less 
+elif [ "$FIRST" == "___FZF_COMPOSTIONUPDATE" ];then
+  clear
+  CLAIM=$1
+  get_resource "$CLAIM"
+  crd=$(find_valid_kind)
+  COMPNAME=$(kubectl -o json get $crd/$NAME|jq -r '.spec.compositionRef.name')
+  LASTCOMPREV=$(kubectl get compositionrevisions.apiextensions.crossplane.io -l "crossplane.io/composition-name=$COMPNAME" -o json|jq -r '.items|max_by(.spec.revision).metadata.name')
+  TEXT="Are you sure you want to update $crd/$NAME to composition revision $LASTCOMPREV?"
+  if dialog --yesno "$TEXT" 5 $[ $(echo $TEXT|wc -c) +3 ];then
+    kubectl patch $crd/$NAME --type=json --patch '[{"op":"replace","path":"/spec/compositionRef/name", "value": "'$LASTCOMPREV'"}]' 2>&1|less
+  fi
 elif [ "$FIRST" == "___FZF_DEFAULT" ];then
   date
   CLAIM=$1
@@ -131,11 +142,10 @@ else
     --bind 'enter:execute('$0' {})+abort'
   else
     FZF_DEFAULT_COMMAND="$0 ___FZF_DEFAULT $FIRST $@" \
-    fzf --no-mouse --header-lines=2 --layout=reverse \
+    fzf --no-mouse --header-lines=3 --layout=reverse \
     --preview "$0 ___FZF_PREVIEW {}" \
     --preview-window up:1:hidden:wrap \
-    --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {}),ctrl-x:execute('$0' ___FZF_DELETE {}),ctrl-o:execute('$0' ___FZF_COMPOSITION {})' \
-    --header 'CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-X: Delete resource, CTRL-O: Show the actual composition, CTRL-R: Reload, CTRL-P: Object preview'
-    clear
+    --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {}),ctrl-x:execute('$0' ___FZF_DELETE {}),ctrl-o:execute('$0' ___FZF_COMPOSITION {}),ctrl-u:execute('$0' ___FZF_COMPOSTIONUPDATE {})' \
+    --header "$(echo -ne "CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-R: Reload, CTRL-P: Object preview\nCTRL-X: Delete resource, CTRL-O: Show the actual composition, CTRL-U: Update to latest compostion revision")"
   fi
 fi
