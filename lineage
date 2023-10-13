@@ -142,7 +142,7 @@ else
     --bind 'enter:execute('$0' {})+abort'
   else
     FZF_DEFAULT_COMMAND="$0 ___FZF_DEFAULT $FIRST $@" \
-    fzf --no-mouse --header-lines=3 --layout=reverse \
+    fzf --no-mouse --header-lines=2 --layout=reverse \
     --preview "$0 ___FZF_PREVIEW {}" \
     --preview-window up:1:hidden:wrap \
     --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {}),ctrl-x:execute('$0' ___FZF_DELETE {}),ctrl-o:execute('$0' ___FZF_COMPOSITION {}),ctrl-u:execute('$0' ___FZF_COMPOSTIONUPDATE {})' \
