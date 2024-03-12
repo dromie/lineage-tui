@@ -119,10 +119,16 @@ elif [ "$FIRST" == "___FZF_COMPOSTIONUPDATE" ];then
   get_resource "$CLAIM"
   crd=$(find_valid_kind)
   COMPNAME=$(kubectl -o json get $crd/$NAME|jq -r '.spec.compositionRef.name')
+  CURRCOMPREV=$(kubectl -o json get $crd/$NAME|jq -r '.spec.compositionRevisionRef.name')
   LASTCOMPREV=$(kubectl get compositionrevisions.apiextensions.crossplane.io -l "crossplane.io/composition-name=$COMPNAME" -o json|jq -r '.items|max_by(.spec.revision).metadata.name')
-  TEXT="Are you sure you want to update $crd/$NAME to composition revision $LASTCOMPREV?"
-  if dialog --yesno "$TEXT" 5 $[ $(echo $TEXT|wc -c) +3 ];then
-    kubectl patch $crd/$NAME --type=json --patch '[{"op":"replace","path":"/spec/compositionRef/name", "value": "'$LASTCOMPREV'"}]' 2>&1|less
+  if [ "$CURRCOMPREV" == "$LASTCOMPREV" ];then
+    TEXT="$crd/$NAME is already at the latest revision $CURRCOMPREV"
+    dialog --msgbox "$TEXT" 5 $[ $(echo $TEXT|wc -c) +3 ]
+  else
+    TEXT="Are you sure you want to update $crd/$NAME composition revision from $CURRCOMPREV to $LASTCOMPREV?"
+    if dialog --yesno "$TEXT" 5 $[ $(echo $TEXT|wc -c) +3 ];then
+      kubectl patch $crd/$NAME --type=json --patch '[{"op":"replace","path":"/spec/compositionRef/name", "value": "'$LASTCOMPREV'"}]' 2>&1|less
+    fi
   fi
 elif [ "$FIRST" == "___FZF_DEFAULT" ];then
   date
