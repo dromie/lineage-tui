@@ -49,8 +49,20 @@ find_valid_kind() {
   done
 }
 
+get_exclude_types() {
+  if [ -z "$EXCLUDED_TYPES" ];then
+    while [ $(stat $CRDCACHE -c "%s") -eq 0 ];do sleep 1;done
+    export EXCLUDED_TYPES=$(echo -n 'Event'
+    PCU=providerconfigusage
+    for group in $(jq -r '.items[].spec|select(.names.kind|ascii_downcase == "'$PCU'").group' $CRDCACHE);do
+      echo -n ",$PCU.$group"
+    done)
+  fi
+  echo "$EXCLUDED_TYPES"
+}
+
 get_resource() {
-  RES=$(echo "$@" |grep -o '[[:alnum:]._-]*/[[:alnum:]._-]*')
+  RES=$(echo "$@" |grep -o '[[:alnum:]._-]*/[[:alnum:]._-]*'|head -1)
   KIND=${RES%%/*}
   NAME=${RES##*/}
 }
@@ -113,6 +125,23 @@ elif [ "$FIRST" == "___FZF_COMPOSITION" ];then
   get_resource "$CLAIM"
   crd=$(find_valid_kind)
   kubectl -o yaml get compositionrevision $(kubectl -o json get $crd/$NAME|jq -r '.spec.compositionRevisionRef.name') | less 
+elif [ "$FIRST" == "__FZF_PAUSECROSSPLANE" ];then
+  clear
+  CLAIM=$1
+  get_resource "$CLAIM"
+  crd=$(find_valid_kind)
+  STATE=$(kubectl -o json get $crd/$NAME|jq -r '.metadata.annotations["crossplane.io/paused"]')
+  if [ "$STATE" == "true" ];then
+    TEXT="Are you sure you want to reENABLE crossplane sync on $crd/$NAME?"
+    if dialog --yesno "$TEXT" 5 $[ $(echo $TEXT|wc -c) +3 ];then
+      kubectl patch $crd/$NAME --type=json --patch --type=json -p '[{"op": "remove", "path": "/metadata/annotations/crossplane.io~1paused"}]' 2>&1|less
+    fi
+  else
+    TEXT="Are you sure you want to DISABLE crossplane sync on $crd/$NAME?"
+    if dialog --yesno "$TEXT" 5 $[ $(echo $TEXT|wc -c) +3 ];then
+      kubectl patch $crd/$NAME --type=json --patch --type=json -p '[{"op": "add", "path": "/metadata/annotations/crossplane.io~1paused", "value": "true"}]' 2>&1|less
+    fi
+  fi
 elif [ "$FIRST" == "___FZF_COMPOSTIONUPDATE" ];then
   clear
   CLAIM=$1
@@ -130,6 +159,16 @@ elif [ "$FIRST" == "___FZF_COMPOSTIONUPDATE" ];then
       kubectl patch $crd/$NAME --type=json --patch '[{"op":"replace","path":"/spec/compositionRef/name", "value": "'$LASTCOMPREV'"}]' 2>&1|less
     fi
   fi
+elif [ "$FIRST" == "___FZF_CRANK_DEFAULT" ];then
+  date
+  CLAIM=$1
+  get_resource "$CLAIM"
+  shift
+  RES=$(kubectl get $KIND -o json -A|jq -r '.items[]|select(.metadata.name=="'$NAME'").spec.resourceRef|.kind+"/"+.name')
+  if [ "$RES" == "/" ];then
+    RES="$KIND/$NAME"
+  fi
+  crank beta trace -o wide "$RES"
 elif [ "$FIRST" == "___FZF_DEFAULT" ];then
   date
   CLAIM=$1
@@ -139,7 +178,7 @@ elif [ "$FIRST" == "___FZF_DEFAULT" ];then
   if [ "$RES" == "/" ];then 
     RES="$CLAIM"
   fi
-  kubectl lineage --exclude-types Event,ProviderConfigUsage.aws,ProviderConfigUsage.tf,ProviderConfigUsage.helm,ProviderConfigUsage.kubernetes "$RES" "$@"
+  kubectl lineage --exclude-types $(get_exclude_types) "$RES" "$@"
 else
   get_resource "$FIRST"
   if [ -z $RES -a -z $KIND ];then
@@ -147,11 +186,19 @@ else
     fzf --layout=reverse  \
     --bind 'enter:execute('$0' {})+abort'
   else
-    FZF_DEFAULT_COMMAND="$0 ___FZF_DEFAULT $FIRST $@" \
+    FZFD=___FZF_DEFAULT
+    FZFD_TOGGLE_COMMAND="$0 ___FZF_CRANK_DEFAULT $FIRST $@"
+    TOGGLEMODE="CRANK"
+    if [ "$MODE" == "CRANK" ];then
+      FZFD=___FZF_CRANK_DEFAULT
+      FZFD_TOGGLE_COMMAND="$0 ___FZF_DEFAULT $FIRST $@"
+      TOGGLEMODE="LINEAGE"
+    fi
+    FZF_DEFAULT_COMMAND="$0 $FZFD $FIRST $@" \
     fzf --no-mouse --header-lines=2 --layout=reverse \
     --preview "$0 ___FZF_PREVIEW {}" \
     --preview-window up:1:hidden:wrap \
-    --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {}),ctrl-x:execute('$0' ___FZF_DELETE {}),ctrl-o:execute('$0' ___FZF_COMPOSITION {}),ctrl-u:execute('$0' ___FZF_COMPOSTIONUPDATE {})' \
-    --header "$(echo -ne "CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-R: Reload, CTRL-P: Object preview\nCTRL-X: Delete resource, CTRL-O: Show the actual composition, CTRL-U: Update to latest compostion revision")"
+    --bind 'enter:execute('$0' ___FZF_ENTER {}),ctrl-q:abort,ctrl-r:reload(eval "$FZF_DEFAULT_COMMAND"),ctrl-p:toggle-preview,ctrl-e:execute('$0' ___FZF_EDIT {}),ctrl-y:execute('$0' ___FZF_YAML {}),ctrl-x:execute('$0' ___FZF_DELETE {}),ctrl-o:execute('$0' ___FZF_COMPOSITION {}),ctrl-u:execute('$0' ___FZF_COMPOSTIONUPDATE {}),ctrl-f:execute('$0' __FZF_PAUSECROSSPLANE {}),ctrl-i:execute(MODE='$TOGGLEMODE' '$0' '$FIRST')' \
+    --header "$(echo -ne "CTRL-Q: Quit, ENTER: Describe resource, CTRL-Y: Get Yaml, CTRL-E: Edit resource, CTRL-R: Reload, CTRL-P: Object preview\nCTRL-X: Delete resource, CTRL-O: Show the actual composition, CTRL-U: Update to latest compostion revision, CTRL-F: Toggle crossplane.io/paused, CTRL-I: $TOGGLEMODE mode")"
   fi
 fi
